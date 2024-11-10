@@ -19,16 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Node_RequestAccess_FullMethodName = "/Node/RequestAccess"
-	Node_ReleaseAccess_FullMethodName = "/Node/ReleaseAccess"
+	Node_ReceiveToken_FullMethodName = "/Node/ReceiveToken"
 )
 
 // NodeClient is the client API for Node service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type NodeClient interface {
-	RequestAccess(ctx context.Context, in *AccessRequest, opts ...grpc.CallOption) (*AccessRespone, error)
-	ReleaseAccess(ctx context.Context, in *AccessRelease, opts ...grpc.CallOption) (*AccessRespone, error)
+	ReceiveToken(ctx context.Context, in *TokenMessage, opts ...grpc.CallOption) (*TokenResponse, error)
 }
 
 type nodeClient struct {
@@ -39,20 +37,10 @@ func NewNodeClient(cc grpc.ClientConnInterface) NodeClient {
 	return &nodeClient{cc}
 }
 
-func (c *nodeClient) RequestAccess(ctx context.Context, in *AccessRequest, opts ...grpc.CallOption) (*AccessRespone, error) {
+func (c *nodeClient) ReceiveToken(ctx context.Context, in *TokenMessage, opts ...grpc.CallOption) (*TokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AccessRespone)
-	err := c.cc.Invoke(ctx, Node_RequestAccess_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *nodeClient) ReleaseAccess(ctx context.Context, in *AccessRelease, opts ...grpc.CallOption) (*AccessRespone, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AccessRespone)
-	err := c.cc.Invoke(ctx, Node_ReleaseAccess_FullMethodName, in, out, cOpts...)
+	out := new(TokenResponse)
+	err := c.cc.Invoke(ctx, Node_ReceiveToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +51,7 @@ func (c *nodeClient) ReleaseAccess(ctx context.Context, in *AccessRelease, opts 
 // All implementations must embed UnimplementedNodeServer
 // for forward compatibility.
 type NodeServer interface {
-	RequestAccess(context.Context, *AccessRequest) (*AccessRespone, error)
-	ReleaseAccess(context.Context, *AccessRelease) (*AccessRespone, error)
+	ReceiveToken(context.Context, *TokenMessage) (*TokenResponse, error)
 	mustEmbedUnimplementedNodeServer()
 }
 
@@ -75,11 +62,8 @@ type NodeServer interface {
 // pointer dereference when methods are called.
 type UnimplementedNodeServer struct{}
 
-func (UnimplementedNodeServer) RequestAccess(context.Context, *AccessRequest) (*AccessRespone, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RequestAccess not implemented")
-}
-func (UnimplementedNodeServer) ReleaseAccess(context.Context, *AccessRelease) (*AccessRespone, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReleaseAccess not implemented")
+func (UnimplementedNodeServer) ReceiveToken(context.Context, *TokenMessage) (*TokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReceiveToken not implemented")
 }
 func (UnimplementedNodeServer) mustEmbedUnimplementedNodeServer() {}
 func (UnimplementedNodeServer) testEmbeddedByValue()              {}
@@ -102,38 +86,20 @@ func RegisterNodeServer(s grpc.ServiceRegistrar, srv NodeServer) {
 	s.RegisterService(&Node_ServiceDesc, srv)
 }
 
-func _Node_RequestAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AccessRequest)
+func _Node_ReceiveToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TokenMessage)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NodeServer).RequestAccess(ctx, in)
+		return srv.(NodeServer).ReceiveToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Node_RequestAccess_FullMethodName,
+		FullMethod: Node_ReceiveToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NodeServer).RequestAccess(ctx, req.(*AccessRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Node_ReleaseAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AccessRelease)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NodeServer).ReleaseAccess(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Node_ReleaseAccess_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NodeServer).ReleaseAccess(ctx, req.(*AccessRelease))
+		return srv.(NodeServer).ReceiveToken(ctx, req.(*TokenMessage))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -146,12 +112,8 @@ var Node_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*NodeServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RequestAccess",
-			Handler:    _Node_RequestAccess_Handler,
-		},
-		{
-			MethodName: "ReleaseAccess",
-			Handler:    _Node_ReleaseAccess_Handler,
+			MethodName: "ReceiveToken",
+			Handler:    _Node_ReceiveToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
