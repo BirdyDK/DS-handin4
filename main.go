@@ -34,26 +34,27 @@ func main() {
 	}()
 
 	// Command channel
-	commandChannel := make(chan string)
+	commandChannel := make(chan string, 100)
 
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
+		//log.Println("Scanner ready")
 		for scanner.Scan() {
+			//log.Println("Scanned: " + scanner.Text())
 			commandChannel <- scanner.Text()
+			//log.Println("Scan sent to channel")
+
 		}
 	}()
 
 	for {
-		time.Sleep(3 * time.Second)
 		var command string
 		if len(commandChannel) > 0 {
-			log.Println("length of commandChannel: " + string(len(commandChannel)))
 			command = <-commandChannel
-			log.Println("Command Value: " + command + "; Length of commandChannel: " + string(len(commandChannel)))
-
 		}
 
 		if command == "enter" {
+			log.Println("Detected ENTER")
 			for {
 				if peerNode.HasToken {
 					peerNode.EnterCriticalSection()
@@ -61,6 +62,9 @@ func main() {
 				}
 			}
 		}
-		peerNode.PassToken()
+		if peerNode.HasToken {
+			time.Sleep(3 * time.Second)
+			peerNode.PassToken()
+		}
 	}
 }
