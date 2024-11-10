@@ -36,7 +36,7 @@ func NewNode(id, address string, nodes []string) *Node {
 		nodes:           nodes,
 		clients:         make(map[string]proto.NodeClient),
 		conns:           make(map[string]*grpc.ClientConn),
-		csAccess:        make(chan bool, 1),
+		csAccess:        make(chan bool, 100),
 		requestQueue:    make(map[string]int64),
 		State:           STATE_REST,
 		deferredReplies: []string{},
@@ -74,15 +74,11 @@ func (n *Node) CanEnterCriticalSection() bool {
 }
 
 func (n *Node) ReleaseAccess(nodeID string) {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-	log.Println(n.ID + " locked releaseaccess")
+
 	n.State = STATE_REST
-	log.Println(n.ID + " state is rest")
 	for _, node := range n.deferredReplies {
 		n.sendReply(node)
 	}
-	log.Println(n.ID + " sent reqplies")
 	n.deferredReplies = []string{}
 	n.csAccess <- true
 	log.Println(n.ID + " unlocking ReleaseAccess")
