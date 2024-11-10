@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,6 +52,7 @@ func main() {
 		var command string
 		if len(commandChannel) > 0 {
 			command = <-commandChannel
+			command = strings.ToLower(command)
 		}
 
 		if command == "enter" {
