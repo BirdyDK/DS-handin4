@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option go_package = "github.com/BirdyDK/DS-handin4";
+
+service Node {
+    rpc RequestAccess (AccessRequest) returns (AccessRespone);
+    rpc ReleaseAccess (AccessRelease) returns (AccessRespone);
+}
+
+message AccessRequest {
+    string node_id = 1;
+    int64 timestamp = 2;
+}
+
+message AccessRelease {
+    string node_id = 1;
+}
+
+message AccessRespone {
+    bool granted = 1;
+}
