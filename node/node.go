@@ -36,7 +36,7 @@ func NewNode(id, address string, nodes []string) *Node {
 		nodes:           nodes,
 		clients:         make(map[string]proto.NodeClient),
 		conns:           make(map[string]*grpc.ClientConn),
-		csAccess:        make(chan bool, 1),
+		csAccess:        make(chan bool, 100),
 		requestQueue:    make(map[string]int64),
 		State:           STATE_REST,
 		deferredReplies: []string{},
