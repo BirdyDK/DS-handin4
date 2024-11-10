@@ -73,7 +73,6 @@ func attemptCriticalSection(peerNode *node.Node) {
 		log.Println("Node", peerNode.ID, "entered the Critical Section")
 		time.Sleep(1 * time.Second) // Simulate Critical Section
 		peerNode.NotifyNodesLeaving()
-		peerNode.ReleaseAccess(peerNode.ID)
 		log.Println("Node", peerNode.ID, "left the Critical Section")
 	} else {
 		log.Println("Node", peerNode.ID, "could not enter the Critical Section at this time.")
