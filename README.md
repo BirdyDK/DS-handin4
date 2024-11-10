@@ -13,3 +13,9 @@ go run main.go -id=node1 -address="localhost:5001" -nextNode="localhost:5002" -t
 go run main.go -id=node2 -address="localhost:5002" -nextNode="localhost:5003"
 
 go run main.go -id=node3 -address="localhost:5003" -nextNode="localhost:5001"
+
+**Enter the critical section:**
+
+Once you have created the network, the token will be passed around every third second.
+
+To enter the critical section, you have to type "enter." If you have the token, you will enter the critical section; otherwise, you will wait until you receive the token.
