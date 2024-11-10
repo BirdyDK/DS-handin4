@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -16,19 +15,14 @@ import (
 func main() {
 	id := flag.String("id", "", "Node ID")
 	address := flag.String("address", "", "Node address")
-	nodes := flag.String("nodes", "", "Comma-separated list of other nodes")
+	nextNode := flag.String("nextNode", "", "Address of the next node")
+	hasToken := flag.Bool("token", false, "Does this node start with the token")
 
 	flag.Parse()
 
-	// Ensure the addresses include ports
-	if !strings.Contains(*address, ":") {
-		log.Fatalf("Invalid address: %s. Must include port.", *address)
-	}
-
-	peerNode := node.NewNode(*id, *address, strings.Split(*nodes, ","))
+	peerNode := node.NewNode(*id, *address, *nextNode, *hasToken)
 
 	go node.StartGRPCServer(*address, peerNode)
-	peerNode.DiscoverNodes()
 
 	// Signal handling for graceful shutdown
 	c := make(chan os.Signal, 1)
@@ -39,42 +33,34 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Informational log
-	log.Println("Node", peerNode.ID, "started and ready to accept commands.")
-	log.Println("To try to enter the Critical Section, type 'enter' and press Enter.")
+	// Command channel
+	commandChannel := make(chan string)
 
-	// Read user input from the command line
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		command := scanner.Text()
-		if command == "enter" {
-			go attemptCriticalSection(peerNode)
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			commandChannel <- scanner.Text()
 		}
-	}
+	}()
 
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-}
+	for {
+		time.Sleep(3 * time.Second)
+		var command string
+		if len(commandChannel) > 0 {
+			log.Println("length of commandChannel: " + string(len(commandChannel)))
+			command = <-commandChannel
+			log.Println("Command Value: " + command + "; Length of commandChannel: " + string(len(commandChannel)))
 
-func attemptCriticalSection(peerNode *node.Node) {
-	log.Println("Node", peerNode.ID, "is attempting to enter the Critical Section...")
-	peerNode.NotifyNodesEntering()
+		}
 
-	// Log the state after notifying nodes
-	log.Println("Node state after NotifyNodesEntering:", peerNode.State)
-
-	time.Sleep(2 * time.Second) // Wait for replies
-
-	// Log the state before checking if it can enter the Critical Section
-	log.Println("Node state before CanEnterCriticalSection check:", peerNode.State)
-
-	if peerNode.CanEnterCriticalSection() {
-		log.Println("Node", peerNode.ID, "entered the Critical Section")
-		time.Sleep(1 * time.Second) // Simulate Critical Section
-		peerNode.NotifyNodesLeaving()
-		log.Println("Node", peerNode.ID, "left the Critical Section")
-	} else {
-		log.Println("Node", peerNode.ID, "could not enter the Critical Section at this time.")
+		if command == "enter" {
+			for {
+				if peerNode.HasToken {
+					peerNode.EnterCriticalSection()
+					break
+				}
+			}
+		}
+		peerNode.PassToken()
 	}
 }

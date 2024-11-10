@@ -21,14 +21,16 @@ func NewGRPCServer(node *Node) *grpc.Server {
 	return s
 }
 
-func (s *server) RequestAccess(ctx context.Context, req *proto.AccessRequest) (*proto.AccessRespone, error) {
-	granted := s.node.RequestAccess(req.NodeId, req.Timestamp)
-	return &proto.AccessRespone{Granted: granted}, nil
-}
+func (s *server) ReceiveToken(ctx context.Context, req *proto.TokenMessage) (*proto.TokenResponse, error) {
+	log.Printf("Node %s: Received token", s.node.ID)
+	s.node.mutex.Lock()
+	s.node.HasToken = true
+	s.node.mutex.Unlock()
 
-func (s *server) ReleaseAccess(ctx context.Context, req *proto.AccessRelease) (*proto.AccessRespone, error) {
-	s.node.ReleaseAccess(req.NodeId)
-	return &proto.AccessRespone{Granted: true}, nil
+	// Automatically attempt to enter the critical section if token is received
+	//go s.node.EnterCriticalSection()
+
+	return &proto.TokenResponse{}, nil
 }
 
 func StartGRPCServer(address string, node *Node) {

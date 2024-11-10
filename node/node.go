@@ -4,142 +4,120 @@ import (
 	"context"
 	"log"
 	"sync"
+	"time"
 
 	proto "github.com/BirdyDK/DS-handin4/proto/github.com/BirdyDK/DS-handin4"
 	"google.golang.org/grpc"
 )
 
 type Node struct {
-	ID              string
-	address         string
-	nodes           []string
-	clients         map[string]proto.NodeClient
-	conns           map[string]*grpc.ClientConn
-	mutex           sync.Mutex
-	csAccess        chan bool
-	requestQueue    map[string]int64
-	timestamp       int64
-	State           string
-	deferredReplies []string
+	ID       string
+	address  string
+	clients  map[string]proto.NodeClient
+	conns    map[string]*grpc.ClientConn
+	mutex    sync.Mutex
+	HasToken bool
+	nextNode string
 }
 
-const (
-	STATE_REST   = "REST"
-	STATE_WANTED = "WANTED"
-	STATE_HELD   = "HELD"
-)
-
-func NewNode(id, address string, nodes []string) *Node {
+func NewNode(id, address, nextNode string, hasToken bool) *Node {
 	return &Node{
-		ID:              id,
-		address:         address,
-		nodes:           nodes,
-		clients:         make(map[string]proto.NodeClient),
-		conns:           make(map[string]*grpc.ClientConn),
-		csAccess:        make(chan bool, 1),
-		requestQueue:    make(map[string]int64),
-		State:           STATE_REST,
-		deferredReplies: []string{},
+		ID:       id,
+		address:  address,
+		clients:  make(map[string]proto.NodeClient),
+		conns:    make(map[string]*grpc.ClientConn),
+		HasToken: hasToken,
+		nextNode: nextNode,
 	}
 }
 
-func (n *Node) RequestAccess(nodeID string, timestamp int64) bool {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	// Update the node's logical clock
-	n.timestamp = max(n.timestamp, timestamp) + 1
-	if n.State == STATE_HELD || (n.State == STATE_WANTED && (n.timestamp < timestamp || (n.timestamp == timestamp && n.ID < nodeID))) {
-		// Defer the reply
-		n.deferredReplies = append(n.deferredReplies, nodeID)
-		return false
-	}
-
-	// Update the state to HELD
-	n.State = STATE_HELD
-	return true
-}
-
-func (n *Node) CanEnterCriticalSection() bool {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	// Node can enter the Critical Section if it is in the WANTED state
-	return n.State == STATE_WANTED
-}
-
-func (n *Node) ReleaseAccess(nodeID string) {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	n.State = STATE_REST
-	for _, node := range n.deferredReplies {
-		n.sendReply(node)
-	}
-	n.deferredReplies = []string{}
-	n.csAccess <- true
-}
-
-func (n *Node) NotifyNodesEntering() {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	n.State = STATE_WANTED
-	n.timestamp++
-
-	for _, client := range n.clients {
-		go func(client proto.NodeClient) {
-			req := &proto.AccessRequest{NodeId: n.ID, Timestamp: n.timestamp}
-			_, err := client.RequestAccess(context.Background(), req)
-			if err != nil {
-				log.Printf("Error while sending access request: %v", err)
-			}
-		}(client)
-	}
-}
-
-func (n *Node) NotifyNodesLeaving() {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	n.State = STATE_REST
-
-	for _, client := range n.clients {
-		go func(client proto.NodeClient) {
-			req := &proto.AccessRelease{NodeId: n.ID}
-			_, err := client.ReleaseAccess(context.Background(), req)
-			if err != nil {
-				log.Printf("Error while sending release notification: %v", err)
-			}
-		}(client)
-	}
-}
-
-func (n *Node) sendReply(nodeID string) {
-	client, conn := NewGRPCClient(nodeID)
-	defer conn.Close()
-
-	req := &proto.AccessRequest{NodeId: n.ID, Timestamp: n.timestamp}
-	_, err := client.RequestAccess(context.Background(), req)
+// New function to create a gRPC client connection
+func NewGRPCClient(address string) (proto.NodeClient, *grpc.ClientConn) {
+	//log.Printf("Attempting to connect to %s", address)
+	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		log.Printf("Error while sending reply: %v", err)
+		log.Printf("Failed to connect to %s: %v", address, err)
+		return nil, nil
+	}
+	client := proto.NewNodeClient(conn)
+	/*if client == nil {
+		log.Printf("NewNodeClient returned nil for address %s", address)
+	} else {
+		log.Printf("NewNodeClient successfully created for address %s", address)
+	}*/
+	return client, conn
+}
+
+// Function to pass the token to the next node
+func (n *Node) PassToken() {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+
+	if n.nextNode == "" || !n.HasToken {
+		return
+	}
+
+	log.Printf("Node %s: Passing token to %s", n.ID, n.nextNode)
+	client, exists := n.clients[n.nextNode]
+	if !exists {
+		//log.Printf("Node %s: Client does not exist for next node %s", n.ID, n.nextNode)
+		// If client doesn't exist, create a new one
+		client, conn := NewGRPCClient(n.nextNode)
+		if client != nil {
+			n.clients[n.nextNode] = client
+			n.conns[n.nextNode] = conn
+			//log.Printf("Node %s: Stored new client for next node %s", n.ID, n.nextNode)
+		} else {
+			//log.Printf("Node %s: Could not connect to next node %s", n.ID, n.nextNode)
+			return
+		}
+	}
+
+	// Check if client is nil before calling its methods
+	client, exists = n.clients[n.nextNode] // Re-fetch the client to see if it was stored correctly
+	if client == nil {
+		//log.Printf("Node %s: Re-fetched client for next node %s is nil (exists: %v)", n.ID, n.nextNode, exists)
+		return
+	}
+
+	// Try to send the token
+	_, err := client.ReceiveToken(context.Background(), &proto.TokenMessage{})
+	if err != nil {
+		//log.Printf("Node %s: Error sending token to %s: %v", n.ID, n.nextNode, err)
+	} else {
+		n.HasToken = false
 	}
 }
 
-func max(a, b int64) int64 {
-	if a > b {
-		return a
+// Function to receive the token
+func (n *Node) ReceiveToken(ctx context.Context, token *proto.TokenMessage) (*proto.TokenResponse, error) {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+
+	//log.Printf("Node %s: Received token", n.ID)
+	n.HasToken = true
+	//go n.EnterCriticalSection()
+	return &proto.TokenResponse{}, nil
+}
+
+// Attempt to enter the critical section if the node has the token
+func (n *Node) EnterCriticalSection() {
+	n.mutex.Lock()
+	if !n.HasToken {
+		n.mutex.Unlock()
+		return
 	}
-	return b
+	n.mutex.Unlock()
+
+	log.Printf("Node %s: Entering Critical Section", n.ID)
+	time.Sleep(1 * time.Second) // Simulate critical section work
+	log.Printf("Node %s: Leaving Critical Section", n.ID)
+
+	// Pass the token to the next node
+	//n.PassToken()
 }
 
 func (n *Node) CloseConnections() {
-	// Send ReleaseAccess messages to all other nodes
-	for _, client := range n.clients {
-		n.ReleaseRemoteAccess(client, n.ID)
-	}
-
-	// Close client and server connections
 	for _, conn := range n.conns {
 		conn.Close()
 	}
